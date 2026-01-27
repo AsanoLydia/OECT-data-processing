@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Aug  8 12:50:28 2024
+Created on Wed Aug 14 16:19:30 2024
 
 @author: 14495
 """
 
 import tkinter as tk
-from tkinter import filedialog, simpledialog, messagebox, Entry, Label, Scrollbar, Listbox
+from tkinter import Listbox, Scrollbar, filedialog, messagebox, simpledialog, Entry, IntVar
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -42,13 +42,14 @@ class DataApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Data Processing Application')
-        self.geometry('600x400')
+        self.geometry('600x600')
         
         # Initialize variables
         self.filepaths = []
         self.starting_point = 449
         self.standard = -450
         self.startline = 15
+        self.save_figure = IntVar(value=1)  # Variable to track the checkbox state (1 = checked, 0 = unchecked)
         
         # Create widgets
         self.create_widgets()
@@ -56,12 +57,26 @@ class DataApp(tk.Tk):
     def create_widgets(self):
         # File selection
         tk.Button(self, text='Add Data Files', command=self.select_files).pack(pady=10)
-        self.listbox = Listbox(self, width=50, height=10)
-        self.listbox.pack(pady=10)
-        Scrollbar(self.listbox, orient="vertical", command=self.listbox.yview).pack(side="right", fill="y")
+        
+        # Frame for Listbox and Scrollbar
+        listbox_frame = tk.Frame(self)
+        listbox_frame.pack(pady=10)
+        
+        self.listbox = Listbox(listbox_frame, width=50, height=10)
+        self.listbox.pack(side="left", fill="y")
+        
+        scrollbar = Scrollbar(listbox_frame, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+        
+        # Configure the scrollbar
+        self.listbox.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.listbox.yview)
         
         # Parameter settings
         tk.Button(self, text='Set Parameters', command=self.set_parameters).pack(pady=10)
+
+        # Checkbox to select whether to save the figure
+        tk.Checkbutton(self, text="Save figure", variable=self.save_figure).pack(pady=10)
         
         # Outputs
         tk.Label(self, text="Figure output filename:").pack()
@@ -87,9 +102,42 @@ class DataApp(tk.Tk):
             messagebox.showinfo("Files Selected", f"Added {len(new_filepaths)} files. Total: {len(self.filepaths)} files.")
 
     def set_parameters(self):
-        self.starting_point = simpledialog.askinteger("Parameter", "Enter the starting point for normalization:", initialvalue=self.starting_point)
-        self.standard = simpledialog.askfloat("Parameter", "Enter the standard value for normalization:", initialvalue=self.standard)
-        self.startline = simpledialog.askinteger("Parameter", "Enter the line number to start reading from:", initialvalue=self.startline)
+        # Create a new top-level window for parameter setting
+        param_window = tk.Toplevel(self)
+        param_window.title("Set Parameters")
+        param_window.geometry("300x300")
+        param_window.transient(self)
+        param_window.grab_set()
+        
+        # Starting point entry
+        tk.Label(param_window, text="Starting Point:").pack(pady=5)
+        starting_point_entry = tk.Entry(param_window)
+        starting_point_entry.pack(pady=5)
+        starting_point_entry.insert(0, str(self.starting_point))
+
+        # Standard value entry
+        tk.Label(param_window, text="Standard Value:").pack(pady=5)
+        standard_entry = tk.Entry(param_window)
+        standard_entry.pack(pady=5)
+        standard_entry.insert(0, str(self.standard))
+
+        # Start line entry
+        tk.Label(param_window, text="Start Line:").pack(pady=5)
+        startline_entry = tk.Entry(param_window)
+        startline_entry.pack(pady=5)
+        startline_entry.insert(0, str(self.startline))
+
+        # Confirm button
+        def on_confirm():
+            try:
+                self.starting_point = int(starting_point_entry.get())
+                self.standard = float(standard_entry.get())
+                self.startline = int(startline_entry.get())
+                param_window.destroy()
+            except ValueError:
+                messagebox.showerror("Invalid Input", "Please enter valid values for all parameters.")
+
+        tk.Button(param_window, text="Confirm", command=on_confirm).pack(pady=10)
 
     def process_data(self):
         if not self.filepaths:
@@ -103,22 +151,27 @@ class DataApp(tk.Tk):
             data = read_from_line(filepath, self.startline)
             normalized_dc = normalize_dc(data, self.starting_point, self.standard)
             
-            plt.plot(data['time'], normalized_dc, label=clean_filename(filepath), color=colors[i])
+            if self.save_figure.get() == 1:  # Check if the checkbox is selected
+                plt.plot(data['time'], normalized_dc, label=clean_filename(filepath), color=colors[i])
             
             file_label = clean_filename(filepath)
             all_data[file_label] = normalized_dc
         
         all_data.index = data['time']
-        plt.xlabel('Time (s)')
-        plt.ylabel('Normalized drain current (uA)')
-        plt.legend()
-        plt.savefig(self.fig_output_entry.get())
         
+        if self.save_figure.get() == 1:  # Save the figure only if checkbox is selected
+            plt.xlabel('Time (s)')
+            plt.ylabel('Normalized drain current (uA)')
+            plt.legend()
+            plt.savefig(self.fig_output_entry.get())
+            plt.show()  # Show the plot after saving to ensure the GUI doesn't freeze
+        
+        # Save the data to Excel file
         with pd.ExcelWriter(self.excel_output_entry.get(), engine='openpyxl') as writer:
             all_data.to_excel(writer, sheet_name='All Data', index_label='Time (s)')
         
-        plt.show()  # Show the plot after saving to ensure the GUI doesn't freeze
-
+        # Show a completion message box
+        messagebox.showinfo("Process completed", "Data processing completed successfully!")
 if __name__ == "__main__":
     app = DataApp()
     app.mainloop()
