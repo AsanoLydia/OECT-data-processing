@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Aug 14 16:19:30 2024
+Created on Sat Aug 31 17:53:30 2024
 
 @author: 14495
 """
-
 import tkinter as tk
 from tkinter import Listbox, Scrollbar, filedialog, messagebox, simpledialog, Entry, IntVar
 import pandas as pd
@@ -71,6 +70,9 @@ class DataApp(tk.Tk):
         # Configure the scrollbar
         self.listbox.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.listbox.yview)
+
+        # Button to clear files from Listbox
+        tk.Button(self, text='Clear Files', command=self.clear_files).pack(pady=10)
         
         # Parameter settings
         tk.Button(self, text='Set Parameters', command=self.set_parameters).pack(pady=10)
@@ -84,10 +86,10 @@ class DataApp(tk.Tk):
         self.fig_output_entry.pack()
         self.fig_output_entry.insert(0, 'output.png')
 
-        tk.Label(self, text="Excel output filename:").pack()
-        self.excel_output_entry = Entry(self)
-        self.excel_output_entry.pack()
-        self.excel_output_entry.insert(0, 'output.xlsx')
+        tk.Label(self, text="CSV output filename:").pack()
+        self.csv_output_entry = Entry(self)
+        self.csv_output_entry.pack()
+        self.csv_output_entry.insert(0, 'output.csv')
         
         # Process button
         tk.Button(self, text='Process Data', command=self.process_data).pack(pady=10)
@@ -100,6 +102,12 @@ class DataApp(tk.Tk):
             for filepath in self.filepaths:  # Re-populate the listbox
                 self.listbox.insert(tk.END, filepath)
             messagebox.showinfo("Files Selected", f"Added {len(new_filepaths)} files. Total: {len(self.filepaths)} files.")
+
+    def clear_files(self):
+        """Clear the listbox and the filepaths list."""
+        self.listbox.delete(0, tk.END)  # Clear all items in the listbox
+        self.filepaths.clear()  # Clear the filepaths list
+        messagebox.showinfo("Cleared", "All files have been cleared from the list.")
 
     def set_parameters(self):
         # Create a new top-level window for parameter setting
@@ -140,38 +148,51 @@ class DataApp(tk.Tk):
         tk.Button(param_window, text="Confirm", command=on_confirm).pack(pady=10)
 
     def process_data(self):
-        if not self.filepaths:
-            messagebox.showerror("Error", "No files selected!")
-            return
+        try:
+            if not self.filepaths:
+                messagebox.showerror("Error", "No files selected!")
+                return
         
-        all_data = pd.DataFrame()
-        colors = plt.cm.rainbow(np.linspace(0, 1, len(self.filepaths)))
+            all_data = None  # Use None as the initial state for merging
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(self.filepaths)))
 
-        for i, filepath in enumerate(self.filepaths):
-            data = read_from_line(filepath, self.startline)
-            normalized_dc = normalize_dc(data, self.starting_point, self.standard)
+            for i, filepath in enumerate(self.filepaths):
+                data = read_from_line(filepath, self.startline)
+                normalized_dc = normalize_dc(data, self.starting_point, self.standard)
             
-            if self.save_figure.get() == 1:  # Check if the checkbox is selected
-                plt.plot(data['time'], normalized_dc, label=clean_filename(filepath), color=colors[i])
+                temp_df = pd.DataFrame({
+                    'Time': data['time'],
+                    clean_filename(filepath): normalized_dc
+                    })
             
-            file_label = clean_filename(filepath)
-            all_data[file_label] = normalized_dc
+                if all_data is None:
+                    all_data = temp_df
+                else:
+                    all_data = pd.merge(all_data, temp_df, on='Time', how='outer')
+
+                if self.save_figure.get() == 1:  # Check if the checkbox is selected
+                    plt.plot(data['time'], normalized_dc, label=clean_filename(filepath), color=colors[i])
         
-        all_data.index = data['time']
+            all_data = all_data.sort_values(by='Time').reset_index(drop=True)
         
-        if self.save_figure.get() == 1:  # Save the figure only if checkbox is selected
-            plt.xlabel('Time (s)')
-            plt.ylabel('Normalized drain current (uA)')
-            plt.legend()
-            plt.savefig(self.fig_output_entry.get())
-            plt.show()  # Show the plot after saving to ensure the GUI doesn't freeze
+            if self.save_figure.get() == 1:  # Save the figure only if checkbox is selected
+                plt.xlabel('Time (s)')
+                plt.ylabel('Normalized drain current (uA)')
+                plt.legend()
+                plt.savefig(self.fig_output_entry.get())
+                plt.show()  # Show the plot after saving to ensure the GUI doesn't freeze
         
-        # Save the data to Excel file
-        with pd.ExcelWriter(self.excel_output_entry.get(), engine='openpyxl') as writer:
-            all_data.to_excel(writer, sheet_name='All Data', index_label='Time (s)')
+            # Save the data to CSV file
+            all_data.to_csv(self.csv_output_entry.get(), index=False)
         
-        # Show a completion message box
-        messagebox.showinfo("Process completed", "Data processing completed successfully!")
+            # Show a completion message box
+            messagebox.showinfo("Process completed", "Data processing and CSV export completed successfully!")
+        
+        except Exception as e:
+            # show error message
+            messagebox.showerror("Error", f"An error occurred during processing: {str(e)}")
+    
+    
 if __name__ == "__main__":
     app = DataApp()
     app.mainloop()
