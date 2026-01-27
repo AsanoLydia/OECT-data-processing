@@ -5,10 +5,9 @@ Created on Sat Aug 31 17:53:30 2024
 @author: 14495
 """
 import tkinter as tk
-from tkinter import Listbox, Scrollbar, filedialog, messagebox, simpledialog, Entry, IntVar
+from tkinter import Listbox, Scrollbar, filedialog, messagebox, Entry, IntVar
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import os
 
@@ -21,12 +20,13 @@ def read_from_line(filename, start_line):
                 parts[0] = float(parts[0]) / 1000
                 parts[2] = float(parts[2]) * 1000000
                 data['time'].append(parts[0])
-                data['gate voltage'].append(float(parts[1]))
+                #data['gate voltage'].append(float(parts[1]))
                 data['drain current'].append(float(parts[2]))
-                data['gate current'].append(float(parts[3]))
+                #data['gate current'].append(float(parts[3]))
     return data
 
 def normalize_dc(data, starting_point, standard):
+    starting_point = int(starting_point*10)
     normalized_drain_current = []
     distance = data['drain current'][starting_point] - standard
     for current in data['drain current']:
@@ -45,7 +45,7 @@ class DataApp(tk.Tk):
         
         # Initialize variables
         self.filepaths = []
-        self.starting_point = 449
+        self.starting_point = 44.9
         self.standard = -450
         self.startline = 15
         self.save_figure = IntVar(value=1)  # Variable to track the checkbox state (1 = checked, 0 = unchecked)
@@ -81,12 +81,12 @@ class DataApp(tk.Tk):
         tk.Checkbutton(self, text="Save figure", variable=self.save_figure).pack(pady=10)
         
         # Outputs
-        tk.Label(self, text="Figure output filename:").pack()
+        tk.Label(self, text="Figure output filepath:").pack()
         self.fig_output_entry = Entry(self)
         self.fig_output_entry.pack()
         self.fig_output_entry.insert(0, 'output.png')
 
-        tk.Label(self, text="CSV output filename:").pack()
+        tk.Label(self, text="CSV output filepath:").pack()
         self.csv_output_entry = Entry(self)
         self.csv_output_entry.pack()
         self.csv_output_entry.insert(0, 'output.csv')
@@ -106,6 +106,7 @@ class DataApp(tk.Tk):
     def clear_files(self):
         """Clear the listbox and the filepaths list."""
         self.listbox.delete(0, tk.END)  # Clear all items in the listbox
+        self.listbox.update()
         self.filepaths.clear()  # Clear the filepaths list
         messagebox.showinfo("Cleared", "All files have been cleared from the list.")
 
@@ -118,19 +119,19 @@ class DataApp(tk.Tk):
         param_window.grab_set()
         
         # Starting point entry
-        tk.Label(param_window, text="Starting Point:").pack(pady=5)
+        tk.Label(param_window, text="Normalization Reference Point:\n(Unit: s), Only one decimal place").pack(pady=5)
         starting_point_entry = tk.Entry(param_window)
         starting_point_entry.pack(pady=5)
         starting_point_entry.insert(0, str(self.starting_point))
 
         # Standard value entry
-        tk.Label(param_window, text="Standard Value:").pack(pady=5)
+        tk.Label(param_window, text="Normalized Value:\n(Unit: μA)").pack(pady=5)
         standard_entry = tk.Entry(param_window)
         standard_entry.pack(pady=5)
         standard_entry.insert(0, str(self.standard))
 
         # Start line entry
-        tk.Label(param_window, text="Start Line:").pack(pady=5)
+        tk.Label(param_window, text="Read lines from:").pack(pady=5)
         startline_entry = tk.Entry(param_window)
         startline_entry.pack(pady=5)
         startline_entry.insert(0, str(self.startline))
@@ -138,7 +139,7 @@ class DataApp(tk.Tk):
         # Confirm button
         def on_confirm():
             try:
-                self.starting_point = int(starting_point_entry.get())
+                self.starting_point = float(starting_point_entry.get())
                 self.standard = float(standard_entry.get())
                 self.startline = int(startline_entry.get())
                 param_window.destroy()
@@ -190,7 +191,7 @@ class DataApp(tk.Tk):
         
         except Exception as e:
             # show error message
-            messagebox.showerror("Error", f"An error occurred during processing: {str(e)}")
+            messagebox.showerror("Error", f"An error occurred during processing: {str(e)}\n Please check the raw data carefully. ")
     
     
 if __name__ == "__main__":
